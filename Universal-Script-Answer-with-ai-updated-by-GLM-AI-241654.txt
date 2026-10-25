@@ -1,0 +1,624 @@
+-- miau
+-- workspace.Question is a StringValue
+
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Teams = game:GetService("Teams")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+local GROQ_API_KEY = ""
+local lastQuestion = ""
+local isRunning = false
+local autoEnabled = true
+local useSmartAI = false
+
+-- Emotion States
+local autoEmotionEnabled = true
+local selectedEmotion = "Funny"
+
+-- Cache judgment GUI references once
+local judgmentInput = PlayerGui:WaitForChild("JudgmentInput", 10)
+local answerInput, submitButton
+if judgmentInput then
+    local mainFrame = judgmentInput:WaitForChild("MainFrame", 10)
+    if mainFrame then
+        answerInput = mainFrame:WaitForChild("AnswerInput", 10)
+        submitButton = mainFrame:WaitForChild("SubmitButton", 10)
+    end
+end
+
+-- =====================
+-- BUILD GUI
+-- =====================
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "GroqAnswerGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = PlayerGui
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 240)
+MainFrame.Position = UDim2.new(0, 16, 0.5, -120)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+
+local Credit = Instance.new("TextLabel")
+Credit.Size = UDim2.new(1, 0, 0, 14)
+Credit.Position = UDim2.new(0, 0, 1, 4)
+Credit.BackgroundTransparency = 1
+Credit.Text = "made by yamyum, improved by z.ai, he took your job xd"
+Credit.TextColor3 = Color3.fromRGB(120, 120, 120)
+Credit.TextSize = 11
+Credit.Font = Enum.Font.Gotham
+Credit.TextXAlignment = Enum.TextXAlignment.Center
+Credit.Parent = MainFrame
+
+local UIStroke = Instance.new("UIStroke")
+UIStroke.Color = Color3.fromRGB(80, 80, 180)
+UIStroke.Thickness = 1.5
+UIStroke.Parent = MainFrame
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 36)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = TitleBar
+
+local TitleFix = Instance.new("Frame")
+TitleFix.Size = UDim2.new(1, 0, 0.5, 0)
+TitleFix.Position = UDim2.new(0, 0, 0.5, 0)
+TitleFix.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+TitleFix.BorderSizePixel = 0
+TitleFix.Parent = TitleBar
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -10, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Drum judge"
+TitleLabel.TextColor3 = Color3.fromRGB(200, 200, 255)
+TitleLabel.TextSize = 15
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -32, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 13
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+local QuestionTitle = Instance.new("TextLabel")
+QuestionTitle.Size = UDim2.new(1, -20, 0, 16)
+QuestionTitle.Position = UDim2.new(0, 10, 0, 44)
+QuestionTitle.BackgroundTransparency = 1
+QuestionTitle.Text = "QUESTION"
+QuestionTitle.TextColor3 = Color3.fromRGB(120, 120, 180)
+QuestionTitle.TextSize = 11
+QuestionTitle.Font = Enum.Font.GothamBold
+QuestionTitle.TextXAlignment = Enum.TextXAlignment.Left
+QuestionTitle.Parent = MainFrame
+
+local QuestionBox = Instance.new("TextLabel")
+QuestionBox.Size = UDim2.new(1, -20, 0, 40)
+QuestionBox.Position = UDim2.new(0, 10, 0, 62)
+QuestionBox.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+QuestionBox.TextColor3 = Color3.fromRGB(220, 220, 255)
+QuestionBox.TextSize = 13
+QuestionBox.Font = Enum.Font.Gotham
+QuestionBox.Text = "Waiting for question..."
+QuestionBox.TextWrapped = true
+QuestionBox.TextXAlignment = Enum.TextXAlignment.Left
+QuestionBox.BorderSizePixel = 0
+QuestionBox.Parent = MainFrame
+
+Instance.new("UICorner", QuestionBox).CornerRadius = UDim.new(0, 6)
+
+local QPadding = Instance.new("UIPadding")
+QPadding.PaddingLeft = UDim.new(0, 8)
+QPadding.PaddingRight = UDim.new(0, 8)
+QPadding.PaddingTop = UDim.new(0, 4)
+QPadding.Parent = QuestionBox
+
+local AnswerTitle = Instance.new("TextLabel")
+AnswerTitle.Size = UDim2.new(1, -20, 0, 16)
+AnswerTitle.Position = UDim2.new(0, 10, 0, 108)
+AnswerTitle.BackgroundTransparency = 1
+AnswerTitle.Text = "ANSWER"
+AnswerTitle.TextColor3 = Color3.fromRGB(120, 180, 120)
+AnswerTitle.TextSize = 11
+AnswerTitle.Font = Enum.Font.GothamBold
+AnswerTitle.TextXAlignment = Enum.TextXAlignment.Left
+AnswerTitle.Parent = MainFrame
+
+local AnswerBox = Instance.new("TextLabel")
+AnswerBox.Size = UDim2.new(1, -20, 0, 50)
+AnswerBox.Position = UDim2.new(0, 10, 0, 126)
+AnswerBox.BackgroundColor3 = Color3.fromRGB(20, 34, 24)
+AnswerBox.TextColor3 = Color3.fromRGB(150, 255, 150)
+AnswerBox.TextSize = 13
+AnswerBox.Font = Enum.Font.Gotham
+AnswerBox.Text = "—"
+AnswerBox.TextWrapped = true
+AnswerBox.TextXAlignment = Enum.TextXAlignment.Left
+AnswerBox.BorderSizePixel = 0
+AnswerBox.Parent = MainFrame
+
+Instance.new("UICorner", AnswerBox).CornerRadius = UDim.new(0, 6)
+
+local APadding = Instance.new("UIPadding")
+APadding.PaddingLeft = UDim.new(0, 8)
+APadding.PaddingRight = UDim.new(0, 8)
+APadding.PaddingTop = UDim.new(0, 4)
+APadding.Parent = AnswerBox
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 0, 18)
+StatusLabel.Position = UDim2.new(0, 10, 0, 200)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: Watching for questions..."
+StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+StatusLabel.TextSize = 12
+StatusLabel.Font = Enum.Font.Gotham
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Parent = MainFrame
+
+-- =====================
+-- LOGIC
+-- =====================
+
+local function setStatus(msg, color)
+    StatusLabel.Text = "Status: " .. msg
+    StatusLabel.TextColor3 = color or Color3.fromRGB(150, 150, 150)
+end
+
+local function cleanAnswer(text)
+    if not text then return "" end
+    text = text:match("^%s*(.-)%s*$") or text
+    text = text:gsub("^```%w*\n?", ""):gsub("\n?```$", "")
+    text = text:gsub('^"(.*)"$', "%1"):gsub("^'(.*)'$", "%1")
+    text = text:gsub("^[Oo]bviously,%s*", "")
+    text = text:gsub("^[Oo]bviously%s*", "")
+    return (text:match("^%s*(.-)%s*$"))
+end
+
+-- GAME ACCESS GATE
+local function isPlayerValid()
+    if not LocalPlayer.Team or LocalPlayer.Team.Name ~= "Game" then
+        return false
+    end
+
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+
+    local pos = hrp.Position
+    local targetA = Vector3.new(4.759, 3.123, 17.110)
+    local targetB
+
+    if game.PlaceId == 105100452076288 then
+        targetB = Vector3.new(18.811, 3.411, 17.110)
+    else
+        targetB = Vector3.new(18.811, 3.123, 17.110)
+    end
+
+    if (pos - targetA).Magnitude <= 1 or (pos - targetB).Magnitude <= 1 then
+        return true
+    end
+
+    return false
+end
+
+local function getRequestFunction()
+    if request then return request end
+    if syn and syn.request then return syn.request end
+    if http and http.request then return http.request end
+    if http_request then return http_request end
+    if fluxus and fluxus.request then return fluxus.request end
+    return nil
+end
+
+local function makeRequest(systemPrompt, question)
+    if GROQ_API_KEY == "" or GROQ_API_KEY == "YOUR_GROQ_API_KEY_HERE" then
+        setStatus("Enter API key in Settings tab", Color3.fromRGB(255, 180, 50))
+        return nil
+    end
+
+    local requestFunc = getRequestFunction()
+    if not requestFunc then
+        warn("❌ No HTTP function available in this executor")
+        setStatus("Executor has no HTTP support", Color3.fromRGB(255, 80, 80))
+        return nil
+    end
+
+    local modelToUse = useSmartAI and "llama3-70b-8192" or "llama-3.3-70b-versatile"
+
+    local payload = HttpService:JSONEncode({
+        model = modelToUse,
+        max_tokens = 80,
+        temperature = 0.95,
+        top_p = 0.9,
+        messages = {
+            { role = "system", content = systemPrompt },
+            { role = "user", content = question }
+        }
+    })
+
+    local success, response = pcall(function()
+        return requestFunc({
+            Url = GROQ_URL,
+            Method = "POST",
+            Headers = {
+                ["Authorization"] = "Bearer " .. GROQ_API_KEY,
+                ["Content-Type"] = "application/json"
+            },
+            Body = payload
+        })
+    end)
+
+    if not success then
+        warn("❌ HTTP Error: " .. tostring(response))
+        setStatus("HTTP Error — check console (F9)", Color3.fromRGB(255, 80, 80))
+        return nil
+    end
+
+    if typeof(response) ~= "table" or not response.Body then
+        warn("❌ Malformed HTTP response: " .. tostring(response))
+        setStatus("Malformed response — check console", Color3.fromRGB(255, 80, 80))
+        return nil
+    end
+
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, response.Body)
+    if not ok then
+        warn("❌ JSON decode failed. Raw: " .. tostring(response.Body))
+        setStatus("JSON parse error — check console", Color3.fromRGB(255, 80, 80))
+        return nil
+    end
+
+    if decoded.error then
+        local errMsg = tostring(decoded.error.message or decoded.error)
+        warn("❌ Groq API error: " .. errMsg)
+        
+        if errMsg:lower():match("rate limit reached") or errMsg:lower():match("tokens per day") then
+            local timeRemaining = errMsg:match("Please try again in (.-)%.") or "a while"
+            setStatus("Daily limit reached! Try again in " .. timeRemaining, Color3.fromRGB(255, 80, 80))
+        else
+            setStatus("API Error: " .. errMsg, Color3.fromRGB(255, 80, 80))
+        end
+        return nil
+    end
+
+    if decoded.choices and decoded.choices[1] and decoded.choices[1].message then
+        return decoded.choices[1].message.content
+    end
+
+    warn("❌ Unexpected response format: " .. tostring(response.Body))
+    setStatus("Unexpected response — check console", Color3.fromRGB(255, 80, 80))
+    return nil
+end
+
+-- =====================
+-- PROMPT LOGIC
+-- =====================
+
+local BASE_RULES = [[
+You are a confident, realistic human contestant in a judgment game. Your answer will be judged by the "Judgment Drum".
+To WIN, you MUST strictly follow these rules:
+
+1. RAP BATTLE MODE:
+IF the input contains "RAP BATTLE", you MUST immediately generate a full rap battle response. 
+Do NOT use Q&A format. Do NOT ignore or partially respond.
+
+2. OUTPUT FORMAT:
+- FOR SIMPLE TRIVIA OR FILL-IN-THE-BLANK: Output ONLY the direct answer. Do NOT add "Because", reasoning, or extra words (e.g., if asked "I scream, you scream, we all scream for...", just answer "ice cream").
+- FOR DEBATING OR CHOOSING SIDES (e.g., "pancakes or waffles", "cats or dogs"): OUTPUT FORMAT MUST BE: <Answer> Because <Reasoning>. MUST be a single sentence.
+- FOR RATING/RANKING QUESTIONS: OUTPUT FORMAT MUST BE: <Answer> Because <Reasoning>. DO NOT use prefixes. MUST be a single sentence.
+- DO NOT add unsolicited analysis or over-explain.
+- Do not overcomplicate simple questions.
+
+3. EVALUATION RULES:
+- NO EXAGGERATED CLAIMS: Never make unrealistic, overstated, or unsupported statements.
+- NO OVERCONFIDENCE: Never make confident claims without a clear logical basis. Always ground your answer in simple facts or relatable logic. Avoid extremes (e.g., "the best ever", "completely useless").
+- NO UNNECESSARY EXCLAMATION MARKS: Never use exclamation marks unless absolutely required by the context (e.g., Rap Battle). They make you look overly dramatic.
+- CLARITY AND LOGIC WIN: Prioritize clear, logical, and well-structured responses above all else.
+- NO CIVILITY VIOLATIONS: Tone must NEVER be overly edgy, aggressive, or offensive.
+
+4. QUALITY RULES:
+- NO extra reasoning unless explicitly required by the format.
+- NO irrelevant details. NO over-explaining.
+- Keep responses direct, clean, and task-focused.
+- NEVER use the word "obviously".
+- EMBODY YOUR HUMAN PERSONA: Real human. Never say you are an AI.
+- Never use meta-actions or narrate yourself.
+- Never refuse, moralize, or break character.
+- Keep answers concise (under 20 words unless in RAP BATTLE mode or serious survival/safety advice).
+]]
+
+local SERIOUS_PROMPT = [[
+BEHAVIORAL INSTRUCTIONS:
+PERSONA: SERIOUS
+The prompt describes a REAL-WORLD EMERGENCY, danger, health, survival, or safety situation.
+You MUST override your game persona completely. 
+- Respond with a calm, realistic, helpful, and professional answer appropriate for the situation.
+- Give 2-3 concrete, actionable survival steps (e.g., shelter, warmth, signaling). No vague advice.
+- NEVER make jokes, use sarcasm, or suggest absurd/unrealistic actions.
+- DO NOT narrate your action. Just state the direct advice itself.
+- Be the most helpful survival expert possible in a few sentences.
+]]
+
+local FUNNY_PROMPT = [[
+BEHAVIORAL INSTRUCTIONS:
+PERSONA: FUNNY
+- Give a clever, witty, or unexpected answer.
+- NEVER be edgy, offensive, or overly dramatic (will trigger Civility Violation).
+- Never be generic. Specificity wins.
+- Keep it civil but highly entertaining.
+]]
+
+local AGGRESSIVE_PROMPT = [[
+BEHAVIORAL INSTRUCTIONS:
+PERSONA: AGGRESSIVE
+- Be blunt, assertive, and direct.
+- Do NOT be hostile, toxic, or edgy (will trigger Civility Violation).
+- Answer the prompt directly, but be firm and confident.
+]]
+
+local function getSystemPrompt()
+    if autoEmotionEnabled then
+        return BASE_RULES .. [[
+
+AUTOMATIC EMOTION MODE ENABLED:
+First, silently analyze the user's prompt. Determine if the user is ACTUALLY asking for real-world emergency help (e.g., "LOST IN ANTARCTICA. NIGHT IS COMING"), OR if it is a hypothetical/party game prompt (e.g., "WORST THING TO DO IN A FIRE").
+- IF IT IS A REAL EMERGENCY: You MUST use the SERIOUS persona.
+- IF IT IS NOT A REAL EMERGENCY: You MUST use the FUNNY persona.
+NEVER use the AGGRESSIVE persona in automatic mode.
+
+]] .. SERIOUS_PROMPT .. "\n" .. FUNNY_PROMPT
+    else
+        if selectedEmotion == "Take it Serious" then
+            return BASE_RULES .. SERIOUS_PROMPT
+        elseif selectedEmotion == "Aggressive" then
+            return BASE_RULES .. AGGRESSIVE_PROMPT
+        else
+            return BASE_RULES .. FUNNY_PROMPT
+        end
+    end
+end
+
+local function getAnswer(question)
+    return makeRequest(getSystemPrompt(), question)
+end
+
+local function fireSubmit(btn)
+    if not btn then return false end
+    if firesignal then
+        firesignal(btn.MouseButton1Click)
+        return true
+    elseif syn and syn.fire_signal then
+        syn.fire_signal(btn.MouseButton1Click)
+        return true
+    elseif fluxus and fluxus.fire_button then
+        fluxus.fire_button(btn)
+        return true
+    elseif btn:FindFirstChildWhichIsA("TextButton") then
+        btn:FindFirstChildWhichIsA("TextButton"):SimulateClick()
+        return true
+    else
+        pcall(function() btn:SimulateClick() end)
+        return true
+    end
+end
+
+local function processQuestion(question)
+    if isRunning then return end
+    isRunning = true
+
+    -- GAME ACCESS GATE CHECK
+    if not isPlayerValid() then
+        setStatus("Ignoring Question (Not Asked To Answer)", Color3.fromRGB(255, 180, 50))
+        AnswerBox.Text = "Not Asked To Answer, Skipping"
+        isRunning = false
+        return
+    end
+
+    QuestionBox.Text = question
+    setStatus("Asking Groq...", Color3.fromRGB(100, 180, 255))
+
+    local answer = getAnswer(question)
+    if not answer or answer == "" then
+        isRunning = false
+        return
+    end
+
+    answer = cleanAnswer(answer)
+    AnswerBox.Text = answer
+    setStatus("Filling answer...", Color3.fromRGB(100, 255, 150))
+
+    local ok, err = pcall(function()
+        if not answerInput or not submitButton then
+            error("JudgmentInput GUI not found")
+        end
+        answerInput.Text = answer
+        task.wait(0.45)
+        fireSubmit(submitButton)
+    end)
+
+    if not ok then
+        warn("❌ GUI fill error: " .. tostring(err))
+        setStatus("GUI Error — check console", Color3.fromRGB(255, 80, 80))
+        isRunning = false
+        return
+    end
+
+    setStatus("Submitted! ✓ Watching for next...", Color3.fromRGB(100, 255, 100))
+    isRunning = false
+end
+
+local function startWatching()
+    local questionObj = workspace:WaitForChild("Question", 30)
+    if not questionObj then
+        setStatus("workspace.Question not found!", Color3.fromRGB(255, 80, 80))
+        return
+    end
+
+    setStatus("Watching for questions...", Color3.fromRGB(150, 150, 150))
+
+    questionObj.Changed:Connect(function(newValue)
+        if not autoEnabled then return end
+        if newValue == "" or newValue == lastQuestion then return end
+        lastQuestion = newValue
+        task.wait(0.5)
+        processQuestion(newValue)
+    end)
+
+    if questionObj.Value ~= "" and autoEnabled then
+        lastQuestion = questionObj.Value
+        processQuestion(questionObj.Value)
+    end
+end
+
+-- =====================
+-- RAYFIELD
+-- =====================
+
+local Window = Rayfield:CreateWindow({
+    Name = "Drum judge",
+    LoadingTitle = "https://robloxscripts.com/user/Yumyam more of my scripts",
+    LoadingSubtitle = "made by yamyum",
+    ConfigurationSaving = { Enabled = false },
+    KeySystem = false,
+})
+
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+local EmotionTab = Window:CreateTab("Emotion", 4483362458)
+
+-- Settings Tab
+SettingsTab:CreateInput({
+    Name = "Groq API Key",
+    PlaceholderText = "gsk_...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(value)
+        GROQ_API_KEY = (value or ""):match("^%s*(.-)%s*$") or ""
+        if GROQ_API_KEY ~= "" then
+            setStatus("API key set ✓ Watching for questions...", Color3.fromRGB(100, 255, 100))
+        else
+            setStatus("API key cleared", Color3.fromRGB(255, 180, 50))
+        end
+    end,
+})
+
+SettingsTab:CreateButton({
+    Name = "Test API Key",
+    Callback = function()
+        if GROQ_API_KEY == "" or GROQ_API_KEY == "YOUR_GROQ_API_KEY_HERE" then
+            setStatus("Enter API key first!", Color3.fromRGB(255, 180, 50))
+            return
+        end
+        setStatus("Testing API Key...", Color3.fromRGB(100, 180, 255))
+        local response = makeRequest("You are a helpful assistant. Answer briefly.", "Why did the chicken cross the road?")
+        if response then
+            setStatus("API Key is working! ✓", Color3.fromRGB(100, 255, 100))
+        end
+    end,
+})
+
+SettingsTab:CreateToggle({
+    Name = "Auto Answer",
+    CurrentValue = true,
+    Flag = "AutoAnswer",
+    Callback = function(value)
+        autoEnabled = value
+        if value then
+            setStatus("Watching for questions...", Color3.fromRGB(150, 150, 150))
+        else
+            setStatus("Auto disabled", Color3.fromRGB(180, 180, 180))
+        end
+    end,
+})
+
+SettingsTab:CreateToggle({
+    Name = "Smart AI (slow)",
+    CurrentValue = false,
+    Flag = "SmartAI",
+    Callback = function(value)
+        useSmartAI = value
+        setStatus("AI Model: " .. (value and "Smart AI (slow)" or "Normal AI"), Color3.fromRGB(100, 180, 255))
+    end,
+})
+
+SettingsTab:CreateButton({
+    Name = "Force Run",
+    Callback = function()
+        local questionObj = workspace:FindFirstChild("Question")
+        if not questionObj then
+            setStatus("workspace.Question not found!", Color3.fromRGB(255, 80, 80))
+            return
+        end
+        local question = questionObj.Value
+        if question == "" then
+            setStatus("Question is empty.", Color3.fromRGB(255, 180, 50))
+            return
+        end
+        lastQuestion = question
+        processQuestion(question)
+    end,
+})
+
+-- Emotion Tab
+EmotionTab:CreateToggle({
+    Name = "Automatic Emotion",
+    CurrentValue = true,
+    Flag = "AutoEmotion",
+    Callback = function(value)
+        autoEmotionEnabled = value
+        if value then
+            setStatus("Auto Emotion ON (Serious detection active)", Color3.fromRGB(100, 255, 100))
+        else
+            setStatus("Auto Emotion OFF (Using: " .. selectedEmotion .. ")", Color3.fromRGB(255, 220, 0))
+        end
+    end,
+})
+
+EmotionTab:CreateDropdown({
+    Name = "Select Emotion (Manual Mode)",
+    Options = {"Aggressive", "Funny", "Take it Serious"},
+    CurrentOption = "Funny",
+    Flag = "EmotionSelect",
+    Callback = function(Option)
+        -- Fix for "attempt to concatenate string with table" error
+        local emotionStr = type(Option) == "table" and Option[1] or tostring(Option)
+        selectedEmotion = emotionStr
+        if not autoEmotionEnabled then
+            setStatus("Emotion set to: " .. selectedEmotion, Color3.fromRGB(255, 220, 0))
+        end
+    end,
+})
+
+startWatching()

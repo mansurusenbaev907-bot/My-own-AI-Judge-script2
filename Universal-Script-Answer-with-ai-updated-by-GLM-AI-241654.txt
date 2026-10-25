@@ -258,7 +258,9 @@ local function makeRequest(systemPrompt, question)
         return nil
     end
 
-    local modelToUse = useSmartAI and "gpt-oss-120b" or "gpt-oss-120b"
+    -- FIX: Added "openai/" prefix so the Groq API can route it correctly
+local modelToUse = useSmartAI and "openai/gpt-oss-120b" or "openai/gpt-oss-120b"
+
 
     local payload = HttpService:JSONEncode({
         model = modelToUse,

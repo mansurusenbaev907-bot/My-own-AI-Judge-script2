@@ -258,7 +258,7 @@ local function makeRequest(systemPrompt, question)
         return nil
     end
 
-    local modelToUse = useSmartAI and "gpt-oss-120b" or "llama-3.3-70b-versatile"
+    local modelToUse = useSmartAI and "gpt-oss-120b" or "gpt-oss-120b"
 
     local payload = HttpService:JSONEncode({
         model = modelToUse,
